@@ -26,6 +26,7 @@ load_dotenv()
 # Import custom modules
 from database import db
 from role_commands import RoleCommands
+from anti_gaming_heuristics import AntiGamingHeuristics
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -47,6 +48,7 @@ class RoleAssignmentResponse(BaseModel):
 
 # Discord bot instance
 bot_instance = None
+anti_gaming = None
 
 # API Key authentication
 async def verify_api_key(x_api_key: Annotated[str, Header()] = None):
@@ -157,13 +159,18 @@ discord_bot = RoleAssignmentBot()
 @app.on_event("startup")
 async def startup_event():
     """Start the Discord bot when FastAPI starts"""
-    global bot_instance
+    global bot_instance, anti_gaming
     bot_instance = discord_bot
     
     # Initialize database connection
     try:
         await db.connect()
         logger.info("Database connection initialized successfully")
+        
+        # Initialize anti-gaming heuristics
+        anti_gaming = AntiGamingHeuristics(db.balance_history)
+        logger.info(f"Anti-gaming heuristics initialized with config: {anti_gaming.get_configuration()}")
+        
     except Exception as e:
         logger.error(f"Failed to initialize database connection: {e}")
         raise HTTPException(status_code=500, detail="Database connection failed")
@@ -189,6 +196,72 @@ async def assign_permanent_roles(request: PermanentRoleAssignmentRequest, _: boo
             logger.error("Discord bot is not ready")
             raise HTTPException(status_code=503, detail="Discord bot is not ready")
         
+        if not anti_gaming:
+            logger.error("Anti-gaming heuristics not initialized")
+            raise HTTPException(status_code=503, detail="Anti-gaming system not ready")
+        
+        # Run anti-gaming heuristics before role assignment
+        if request.wallet_address:
+            # Get current balance for validation (we'll need to fetch this)
+            try:
+                async with aiohttp.ClientSession() as session:
+                    osmosis_api_url = os.getenv('OSMOSIS_API_URL', 'https://lcd.testnet.osmosis.zone')
+                    balance_url = f"{osmosis_api_url}/cosmos/bank/v1beta1/balances/{request.wallet_address}"
+                    
+                    async with session.get(balance_url) as response:
+                        if response.status == 200:
+                            balance_data = await response.json()
+                            current_balance = 0.0
+                            
+                            # Find OSMO balance
+                            for balance in balance_data.get('balances', []):
+                                if balance.get('denom') == 'uosmo':
+                                    current_balance = float(balance.get('amount', 0)) / 1_000_000  # Convert from uosmo to osmo
+                                    break
+                            
+                            # Validate wallet with anti-gaming heuristics
+                            validation_result = await anti_gaming.validate_wallet_for_role_assignment(
+                                request.wallet_address, current_balance
+                            )
+                            
+                            if not validation_result['is_valid']:
+                                logger.warning(f"Role assignment blocked for user {request.discord_id} (wallet: {request.wallet_address})")
+                                logger.warning(f"Blocked reasons: {', '.join(validation_result['blocked_reasons'])}")
+                                
+                                # Log the blocked assignment for audit purposes
+                                blocked_assignment = {
+                                    'timestamp': datetime.utcnow(),
+                                    'discordId': request.discord_id,
+                                    'walletAddress': request.wallet_address,
+                                    'currentBalance': current_balance,
+                                    'requestedRoles': request.role_ids,
+                                    'blocked_reasons': validation_result['blocked_reasons'],
+                                    'checks_performed': validation_result['checks_performed']
+                                }
+                                
+                                # Store blocked assignment in database for audit
+                                try:
+                                    blocked_collection = db.client[db.db_name]['blocked_role_assignments']
+                                    blocked_collection.insert_one(blocked_assignment)
+                                    logger.info(f"Logged blocked role assignment for audit: {request.discord_id}")
+                                except Exception as audit_error:
+                                    logger.error(f"Failed to log blocked assignment: {audit_error}")
+                                
+                                # Return error response
+                                raise HTTPException(
+                                    status_code=403, 
+                                    detail=f"Role assignment blocked by anti-gaming system: {', '.join(validation_result['blocked_reasons'])}"
+                                )
+                            else:
+                                logger.info(f"Anti-gaming checks passed for user {request.discord_id}: wallet validation successful")
+                        else:
+                            logger.warning(f"Could not fetch balance for wallet {request.wallet_address}, proceeding with role assignment")
+                            
+            except Exception as balance_error:
+                logger.error(f"Error fetching balance for anti-gaming check: {balance_error}")
+                # Be permissive on balance fetch errors - don't block legitimate users
+                logger.info("Proceeding with role assignment due to balance fetch error")
+        
         guild_id_str = os.getenv('DISCORD_GUILD_ID')
         logger.info(f"Guild ID from env: {guild_id_str}")
         
@@ -210,10 +283,17 @@ async def assign_permanent_roles(request: PermanentRoleAssignmentRequest, _: boo
             logger.error(f"Discord server not found for guild ID: {guild_id}")
             raise HTTPException(status_code=404, detail="Discord server not found")
         
-        # Get the Discord member
+        # Get the Discord member - use fetch_member to force API call instead of cache
         logger.info(f"Looking for member with ID: {request.discord_id}")
-        member = guild.get_member(int(request.discord_id))
-        logger.info(f"Member object: {member}")
+        try:
+            member = await guild.fetch_member(int(request.discord_id))
+            logger.info(f"Member object: {member}")
+        except discord.NotFound:
+            logger.error(f"User not found in Discord server: {request.discord_id}")
+            raise HTTPException(status_code=404, detail="User not found in Discord server")
+        except Exception as e:
+            logger.error(f"Error fetching member {request.discord_id}: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error fetching member: {str(e)}")
         
         if not member:
             logger.error(f"User not found in Discord server: {request.discord_id}")
@@ -470,4 +550,5 @@ async def send_embed(
         logger.error(f"Error sending embed: {e}")
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    # Bind to localhost only for security - web app connects via internal network
+    uvicorn.run(app, host="127.0.0.1", port=8001)

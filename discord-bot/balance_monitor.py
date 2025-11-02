@@ -10,6 +10,7 @@ from pymongo.database import Database
 import threading
 import time
 import json
+from anti_gaming_heuristics import AntiGamingHeuristics
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,9 @@ class BalanceMonitor:
         self.roles_collection: Optional[Collection] = None
         self.running = False
         self.monitor_thread = None
+        
+        # Anti-gaming heuristics
+        self.anti_gaming: Optional[AntiGamingHeuristics] = None
         
         # Discord API configuration
         self.discord_token = os.getenv('DISCORD_BOT_TOKEN')  # Changed from DISCORD_TOKEN
@@ -45,9 +49,13 @@ class BalanceMonitor:
             self.balance_history_collection = self.db['balance_history']
             self.roles_collection = self.db['roles']
             
+            # Initialize anti-gaming heuristics
+            self.anti_gaming = AntiGamingHeuristics(self.balance_history_collection)
+            
             # Test the connection
             self.client.admin.command('ping')
             logger.info("Balance monitor connected to MongoDB")
+            logger.info(f"Anti-gaming heuristics initialized with config: {self.anti_gaming.get_configuration()}")
             
         except Exception as e:
             logger.error(f"Failed to connect to MongoDB in balance monitor: {e}")
@@ -211,6 +219,10 @@ class BalanceMonitor:
             logger.error("Discord token or guild ID not configured")
             return
         
+        if not self.anti_gaming:
+            logger.error("Anti-gaming heuristics not initialized")
+            return
+
         headers = {
             'Authorization': f'Bot {self.discord_token}',
             'Content-Type': 'application/json'
@@ -220,6 +232,41 @@ class BalanceMonitor:
             for update in balance_updates:
                 try:
                     discord_id = str(update['discordId'])
+                    wallet_address = update.get('walletAddress')
+                    current_balance = update['currentBalance']
+                    
+                    # Run anti-gaming heuristics before role assignment
+                    if wallet_address and current_balance > 0:
+                        validation_result = await self.anti_gaming.validate_wallet_for_role_assignment(
+                            wallet_address, current_balance
+                        )
+                        
+                        if not validation_result['is_valid']:
+                            logger.warning(f"Role assignment blocked for user {discord_id} (wallet: {wallet_address})")
+                            logger.warning(f"Blocked reasons: {', '.join(validation_result['blocked_reasons'])}")
+                            
+                            # Log the blocked assignment for audit purposes
+                            blocked_assignment = {
+                                'timestamp': datetime.utcnow(),
+                                'discordId': discord_id,
+                                'walletAddress': wallet_address,
+                                'currentBalance': current_balance,
+                                'blocked_reasons': validation_result['blocked_reasons'],
+                                'checks_performed': validation_result['checks_performed']
+                            }
+                            
+                            # Store blocked assignment in database for audit
+                            try:
+                                blocked_collection = self.db['blocked_role_assignments']
+                                blocked_collection.insert_one(blocked_assignment)
+                                logger.info(f"Logged blocked role assignment for audit: {discord_id}")
+                            except Exception as audit_error:
+                                logger.error(f"Failed to log blocked assignment: {audit_error}")
+                            
+                            # Skip role assignment for this user
+                            continue
+                        else:
+                            logger.info(f"Anti-gaming checks passed for user {discord_id}: {validation_result['checks_performed']}")
                     
                     # Get member info
                     member_url = f"{self.discord_api_base}/guilds/{self.guild_id}/members/{discord_id}"

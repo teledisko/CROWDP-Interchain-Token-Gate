@@ -10,12 +10,13 @@ const Navbar = () => {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <div className="flex items-center">
-            <Image 
-              src="/imgs/text-only-logo-for-navbar.avif" 
-              alt="CrowdPunk Logo" 
-              width={500}
-              height={100}
-              className="object-contain"
+            <Image
+              src="/imgs/text-only-logo-for-navbar.avif"
+              alt="CrowdPunk Logo"
+              width={400}
+              height={80}
+              className="h-16 w-auto"
+              priority
             />
           </div>
 

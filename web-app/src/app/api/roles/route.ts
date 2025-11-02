@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { withRateLimit } from '../../lib/rate-limiter';
+import { withRateLimit } from '@/app/lib/rate-limiter';
 import { createSecureResponse, createSecureErrorResponse } from '@/lib/security-headers';
-import { RoleDatabase } from '../../lib/database';
+import { RoleDatabase } from '@/app/lib/database';
 
 async function getRolesHandler(request: NextRequest) {
   try {
@@ -92,7 +92,7 @@ export const GET = withRateLimit(getRolesHandler, 'default');
 async function createRoleHandler(request: NextRequest) {
   try {
     // Verify admin access for role creation
-    const { verifyAdminAccess } = await import('../../lib/auth');
+    const { verifyAdminAccess } = await import('@/app/lib/auth');
     const authResult = await verifyAdminAccess(request);
     
     if (!authResult.success) {

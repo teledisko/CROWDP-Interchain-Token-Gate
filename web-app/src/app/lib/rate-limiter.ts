@@ -21,10 +21,10 @@ export const RATE_LIMITS = {
     windowMs: 15 * 60 * 1000, // 15 minutes
     maxRequests: 10, // 10 requests per 15 minutes
   },
-  // Role assignment endpoints (very restrictive)
+  // Role assignment endpoints (reasonable for development)
   roleAssignment: {
-    windowMs: 60 * 60 * 1000, // 1 hour
-    maxRequests: 5, // 5 requests per hour
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    maxRequests: 50, // 50 requests per 15 minutes
   },
   // User save/update endpoints
   userUpdate: {
@@ -114,7 +114,7 @@ function inMemoryRateLimit(clientId: string, config: { windowMs: number; maxRequ
 }
 
 /**
- * Rate limiting middleware with Redis support and in-memory fallback
+ * Rate limiting middleware with Redis support and in-memory fallback (development only)
  */
 export function rateLimit(config: { windowMs: number; maxRequests: number }) {
   return async (request: NextRequest): Promise<NextResponse | null> => {
@@ -150,10 +150,32 @@ export function rateLimit(config: { windowMs: number; maxRequests: number }) {
         return null; // Allow request
       }
     } catch (error) {
+      if (process.env.NODE_ENV === 'production') {
+        console.error('CRITICAL: Redis rate limiting failed in production:', error);
+        // In production, fail the request if Redis is unavailable
+        return NextResponse.json(
+          {
+            error: 'Service temporarily unavailable',
+            message: 'Rate limiting service is unavailable. Please try again later.'
+          },
+          { status: 503 }
+        );
+      }
       console.warn('Redis rate limiting failed, falling back to in-memory:', error);
     }
     
-    // Fall back to in-memory rate limiting
+    // Fall back to in-memory rate limiting (development only)
+    if (process.env.NODE_ENV === 'production') {
+      console.error('CRITICAL: Attempting to use in-memory rate limiting in production');
+      return NextResponse.json(
+        {
+          error: 'Service temporarily unavailable',
+          message: 'Rate limiting service is unavailable. Please try again later.'
+        },
+        { status: 503 }
+      );
+    }
+    
     return inMemoryRateLimit(clientId, config);
   };
 }
@@ -217,10 +239,32 @@ export async function rateLimitByIpAndUser(
       return null; // Allow request
     }
   } catch (error) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('CRITICAL: Redis rate limiting failed in production:', error);
+      // In production, fail the request if Redis is unavailable
+      return NextResponse.json(
+        {
+          error: 'Service temporarily unavailable',
+          message: 'Rate limiting service is unavailable. Please try again later.'
+        },
+        { status: 503 }
+      );
+    }
     console.warn('Redis rate limiting failed, falling back to in-memory:', error);
   }
   
-  // Fall back to in-memory rate limiting
+  // Fall back to in-memory rate limiting (development only)
+  if (process.env.NODE_ENV === 'production') {
+    console.error('CRITICAL: Attempting to use in-memory rate limiting in production');
+    return NextResponse.json(
+      {
+        error: 'Service temporarily unavailable',
+        message: 'Rate limiting service is unavailable. Please try again later.'
+      },
+      { status: 503 }
+    );
+  }
+  
   const now = Date.now();
   let entry = rateLimitStore.get(clientId);
 

@@ -1,0 +1,65 @@
+{
+  "roles": {
+    "osmosis_holder": {
+      "role_id": "1234567890123456789",
+      "name": "OSMO Holder",
+      "description": "Users holding OSMO tokens",
+      "threshold": {
+        "token": "OSMO",
+        "minimum_amount": 100,
+        "decimals": 6
+      },
+      "color": "#7C2D92",
+      "enabled": true
+    },
+    "atom_holder": {
+      "role_id": "1234567890123456790",
+      "name": "ATOM Holder", 
+      "description": "Users holding ATOM tokens",
+      "threshold": {
+        "token": "ATOM",
+        "minimum_amount": 50,
+        "decimals": 6
+      },
+      "color": "#2E3192",
+      "enabled": true
+    },
+    "whale": {
+      "role_id": "1234567890123456791",
+      "name": "Whale",
+      "description": "High-value token holders",
+      "threshold": {
+        "token": "OSMO",
+        "minimum_amount": 10000,
+        "decimals": 6
+      },
+      "color": "#FFD700",
+      "enabled": true
+    },
+    "diamond_hands": {
+      "role_id": "1234567890123456792",
+      "name": "Diamond Hands",
+      "description": "Long-term holders (30+ days)",
+      "threshold": {
+        "token": "OSMO",
+        "minimum_amount": 500,
+        "decimals": 6,
+        "holding_period_days": 30
+      },
+      "color": "#00FFFF",
+      "enabled": false
+    }
+  },
+  "settings": {
+    "check_interval_hours": 24,
+    "grace_period_hours": 72,
+    "auto_remove_roles": true,
+    "log_role_changes": true,
+    "require_verification": true
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "last_updated": "2025-01-28T00:00:00Z",
+    "updated_by": "admin"
+  }
+}

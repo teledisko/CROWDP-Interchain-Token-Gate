@@ -1,12 +1,12 @@
 import { NextRequest } from 'next/server';
-import { withRateLimit } from '../../lib/rate-limiter';
+import { withRateLimit } from '@/app/lib/rate-limiter';
 import { createSecureResponse, createSecureErrorResponse } from '@/lib/security-headers';
-import { validateRequestBody, testRoleRequestSchema, sanitizeWalletAddress } from '../../lib/validation';
+import { validateRequestBody, testRoleRequestSchema, sanitizeWalletAddress } from '@/app/lib/validation';
 
 async function testRoleHandler(request: NextRequest) {
   try {
     // Verify admin access for test role assignment
-    const { verifyAdminAccess } = await import('../../lib/auth');
+    const { verifyAdminAccess } = await import('@/app/lib/auth');
     const authResult = await verifyAdminAccess(request);
     
     if (!authResult.success) {

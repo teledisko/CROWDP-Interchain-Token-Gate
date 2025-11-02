@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
-import { connectToDatabase } from '../../../lib/mongodb';
-import { withRateLimit } from '../../../lib/rate-limiter';
+import { connectToDatabase } from '@/app/lib/mongodb';
+import { withRateLimit } from '@/app/lib/rate-limiter';
 import { createSecureResponse, createSecureErrorResponse } from '@/lib/security-headers';
 import { verifyUserSession } from '@/app/lib/auth';
 
@@ -56,7 +56,7 @@ async function unlinkHandler(request: NextRequest) {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-API-Key': apiKey
+            'x-api-key': apiKey
           },
           body: JSON.stringify({
             discord_id: discordId,

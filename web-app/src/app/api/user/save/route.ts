@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server';
-import { connectToDatabase } from '../../../lib/mongodb';
-import { calculateUserRole } from '../../../lib/roles';
-import { withRateLimit } from '../../../lib/rate-limiter';
+import { connectToDatabase } from '@/app/lib/mongodb';
+import { calculateUserRole } from '@/app/lib/roles';
+import { withRateLimit } from '@/app/lib/rate-limiter';
 import { createSecureResponse, createSecureErrorResponse } from '@/lib/security-headers';
-import { validateRequestBody, saveUserRequestSchema, sanitizeWalletAddress } from '../../../lib/validation';
+import { validateRequestBody, saveUserRequestSchema, sanitizeWalletAddress } from '@/app/lib/validation';
 
 async function saveUserHandler(request: NextRequest) {
   try {
@@ -76,10 +76,12 @@ async function saveUserHandler(request: NextRequest) {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              'x-api-key': process.env.DISCORD_BOT_API_KEY || '',
             },
             body: JSON.stringify({
               discord_id: existingUser.discordId,
-              role_ids: [] // Empty array means remove all token-based roles
+              role_ids: [], // Empty array means remove all token-based roles
+              wallet_address: existingUser.walletAddress
             }),
           });
 

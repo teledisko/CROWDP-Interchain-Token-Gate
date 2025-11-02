@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
-import { connectToDatabase } from '../../../lib/mongodb';
-import { withRateLimit } from '../../../lib/rate-limiter';
+import { connectToDatabase } from '@/app/lib/mongodb';
+import { withRateLimit } from '@/app/lib/rate-limiter';
 import { createSecureResponse, createSecureErrorResponse } from '@/lib/security-headers';
-import { validateRequestBody, checkUserRequestSchema, sanitizeWalletAddress } from '../../../lib/validation';
+import { validateRequestBody, checkUserRequestSchema, sanitizeWalletAddress } from '@/app/lib/validation';
 
 async function checkUserHandler(request: NextRequest) {
   try {

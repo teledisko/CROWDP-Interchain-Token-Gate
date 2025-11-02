@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
-import { connectToDatabase } from '../../../lib/mongodb';
-import { calculateUserRole, getAllRoleGoals } from '../../../lib/roles';
+import { connectToDatabase } from '@/app/lib/mongodb';
+import { calculateUserRole, getAllRoleGoals } from '@/app/lib/roles';
 import { withRateLimit } from '@/app/lib/rate-limiter';
 import { createSecureResponse, createSecureErrorResponse } from '@/lib/security-headers';
 

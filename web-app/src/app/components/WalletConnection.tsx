@@ -172,17 +172,32 @@ export default function WalletConnection({ onWalletConnect }: WalletConnectionPr
         const redirectUri = url.searchParams.get('redirect_uri');
         if (redirectUri) {
           const redirectUrl = new URL(redirectUri);
-          const allowedHosts = ['localhost', '127.0.0.1'];
           const currentHost = window.location.hostname;
           
-          // Strict validation: only allow exact matches from whitelist or current host
-          if (!allowedHosts.includes(redirectUrl.hostname) && redirectUrl.hostname !== currentHost) {
+          // More flexible localhost validation - handle various localhost formats
+          const isLocalhost = (hostname: string) => {
+            return hostname === 'localhost' || 
+                   hostname === '127.0.0.1' || 
+                   hostname === '0.0.0.0' ||
+                   hostname.startsWith('localhost:') ||
+                   hostname.startsWith('127.0.0.1:') ||
+                   hostname.startsWith('0.0.0.0:') ||
+                   /^localhost$/i.test(hostname) ||
+                   /^127\.0\.0\.1$/.test(hostname);
+          };
+          
+          // Allow current host or localhost variations
+          const isValidHost = redirectUrl.hostname === currentHost || 
+                             isLocalhost(redirectUrl.hostname) || 
+                             isLocalhost(currentHost);
+          
+          if (!isValidHost) {
             throw new Error('Invalid redirect URI hostname');
           }
           
           // Additional security: ensure protocol is HTTPS in production or HTTP for localhost
           if (redirectUrl.protocol !== 'https:' && 
-              !(['localhost', '127.0.0.1'].includes(redirectUrl.hostname) && redirectUrl.protocol === 'http:')) {
+              !(isLocalhost(redirectUrl.hostname) && redirectUrl.protocol === 'http:')) {
             throw new Error('Invalid redirect URI protocol');
           }
           
@@ -314,6 +329,7 @@ export default function WalletConnection({ onWalletConnect }: WalletConnectionPr
             width={156}
             height={156}
             className="mx-auto object-contain"
+            style={{ width: 'auto', height: 'auto' }}
           />
         </div>
 

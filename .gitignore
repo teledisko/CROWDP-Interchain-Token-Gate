@@ -4,7 +4,7 @@
 .env.development.local
 .env.test.local
 .env.production.local
-
+CrowdP.pem
 # Dependencies
 node_modules/
 __pycache__/

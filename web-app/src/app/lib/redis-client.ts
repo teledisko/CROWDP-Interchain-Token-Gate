@@ -9,6 +9,11 @@ const CONNECTION_RETRY_INTERVAL = 60000; // 1 minute
  * Get or create Redis client instance
  */
 export async function getRedisClient(): Promise<RedisClientType> {
+  // In production, Redis is mandatory - fail fast if not available
+  if (process.env.NODE_ENV === 'production' && redisConnectionFailed) {
+    throw new Error('Redis is required in production but connection failed');
+  }
+
   // If Redis connection previously failed and we're in development, 
   // don't spam connection attempts
   if (redisConnectionFailed && process.env.NODE_ENV === 'development') {
@@ -26,31 +31,37 @@ export async function getRedisClient(): Promise<RedisClientType> {
     redisClient = createClient({
       url: redisUrl,
       socket: {
-        connectTimeout: 3000, // Reduced timeout for faster fallback
+        connectTimeout: process.env.NODE_ENV === 'production' ? 10000 : 3000, // Longer timeout in production
         reconnectStrategy: (retries) => {
-          // In development, don't retry as aggressively
-          if (process.env.NODE_ENV === 'development' && retries > 3) {
-            return false;
+          // In production, be more aggressive with retries
+          if (process.env.NODE_ENV === 'production') {
+            if (retries > 20) {
+              return false; // Stop retrying after 20 attempts in production
+            }
+            return Math.min(retries * 200, 5000); // Exponential backoff with max 5s
           }
-          if (retries > 10) {
-            return false; // Stop retrying after 10 attempts
+          
+          // In development, don't retry as aggressively
+          if (retries > 3) {
+            return false;
           }
           return Math.min(retries * 100, 3000); // Exponential backoff with max 3s
         }
       }
     });
 
-    // Reduce error logging noise in development
+    // Handle errors differently based on environment
     redisClient.on('error', (err) => {
-      if (process.env.NODE_ENV === 'development') {
+      if (process.env.NODE_ENV === 'production') {
+        console.error('Redis Client Error (PRODUCTION - CRITICAL):', err);
+        redisConnectionFailed = true;
+      } else {
         // Only log once per minute in development
         const now = Date.now();
         if (now - lastConnectionAttempt > CONNECTION_RETRY_INTERVAL) {
           console.warn('Redis unavailable, using in-memory fallback');
           lastConnectionAttempt = now;
         }
-      } else {
-        console.error('Redis Client Error:', err);
       }
     });
 
@@ -65,7 +76,10 @@ export async function getRedisClient(): Promise<RedisClientType> {
     });
 
     redisClient.on('end', () => {
-      if (process.env.NODE_ENV !== 'development') {
+      if (process.env.NODE_ENV === 'production') {
+        console.error('Redis Client Connection Ended (PRODUCTION - CRITICAL)');
+        redisConnectionFailed = true;
+      } else {
         console.log('Redis Client Connection Ended');
       }
     });
@@ -76,14 +90,15 @@ export async function getRedisClient(): Promise<RedisClientType> {
     } catch (error) {
       redisConnectionFailed = true;
       
-      if (process.env.NODE_ENV === 'development') {
+      if (process.env.NODE_ENV === 'production') {
+        console.error('CRITICAL: Failed to connect to Redis in production:', error);
+        throw new Error('Redis connection required in production but failed to connect');
+      } else {
         // Only log once in development
         console.warn('Redis not available, falling back to in-memory rate limiting');
-      } else {
-        console.error('Failed to connect to Redis:', error);
       }
       
-      // Fall back to in-memory rate limiting if Redis is not available
+      // Fall back to in-memory rate limiting if Redis is not available (development only)
       redisClient = null;
       throw error;
     }

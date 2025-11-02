@@ -49,9 +49,9 @@ const options = {
   serverSelectionTimeoutMS: 5000,
   socketTimeoutMS: 45000,
   family: 4, // Use IPv4, skip trying IPv6
-  // Enable SSL/TLS for production
+  // Enable SSL/TLS for production only for remote connections
   ...(process.env.NODE_ENV === 'production' && {
-    tls: true,
+    tls: !uri.includes('localhost') && !uri.includes('127.0.0.1'),
     tlsAllowInvalidCertificates: false,
   }),
 };

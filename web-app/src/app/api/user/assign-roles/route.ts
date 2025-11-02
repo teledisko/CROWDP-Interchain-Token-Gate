@@ -3,24 +3,35 @@ import { connectToDatabase } from '@/app/lib/mongodb';
 import { calculateUserRole } from '@/app/lib/roles';
 import { withRateLimit } from '@/app/lib/rate-limiter';
 import { createSecureResponse, createSecureErrorResponse } from '@/lib/security-headers';
+import { verifyUserSession } from '@/app/lib/auth';
 
 async function assignRolesHandler(request: NextRequest) {
   try {
+    // Verify user session first
+    const sessionResult = await verifyUserSession(request);
+    
+    if (!sessionResult.success || !sessionResult.user) {
+      return createSecureErrorResponse('Authentication required', 401);
+    }
+
     const { walletAddress } = await request.json();
     
-    if (!walletAddress) {
+    // Use wallet address from session if not provided in request
+    const targetWalletAddress = walletAddress || sessionResult.user.walletAddress;
+    
+    if (!targetWalletAddress) {
       return createSecureErrorResponse('Wallet address is required', 400);
     }
 
     // Validate wallet address format
-    if (!walletAddress.startsWith('osmo') || walletAddress.length !== 43) {
+    if (!targetWalletAddress.startsWith('osmo') || targetWalletAddress.length !== 43) {
       return createSecureErrorResponse('Invalid Osmosis wallet address format', 400);
     }
 
     const { db } = await connectToDatabase();
     
     // Find user in database
-    const user = await db.collection('users').findOne({ walletAddress });
+    const user = await db.collection('users').findOne({ walletAddress: targetWalletAddress });
     
     if (!user || !user.discordId) {
       return createSecureErrorResponse('User not found or Discord not connected', 404);
@@ -30,7 +41,7 @@ async function assignRolesHandler(request: NextRequest) {
     let osmoBalance = 0;
     try {
       const cosmosRestUrl = process.env.COSMOS_REST_URL || 'https://lcd.testnet.osmosis.zone';
-      const response = await fetch(`${cosmosRestUrl}/cosmos/bank/v1beta1/balances/${walletAddress}`);
+      const response = await fetch(`${cosmosRestUrl}/cosmos/bank/v1beta1/balances/${targetWalletAddress}`);
       if (!response.ok) {
         throw new Error('Failed to fetch balance from blockchain');
       }
@@ -66,17 +77,18 @@ async function assignRolesHandler(request: NextRequest) {
     // Call Discord bot API to assign roles
     if (eligibleDiscordRoles.length > 0) {
       try {
-        const discordBotUrl = process.env.DISCORD_BOT_API_URL || 'http://localhost:8001';
+        const discordBotUrl = process.env.DISCORD_BOT_URL || 'http://localhost:8001';
         
         const response = await fetch(`${discordBotUrl}/assign-permanent-roles`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'x-api-key': process.env.DISCORD_BOT_API_KEY || '',
           },
           body: JSON.stringify({
             discord_id: user.discordId,
             role_ids: eligibleDiscordRoles,
-            wallet_address: walletAddress
+            wallet_address: targetWalletAddress
           }),
         });
 
@@ -89,7 +101,7 @@ async function assignRolesHandler(request: NextRequest) {
         
         // Update user's role information in database
         await db.collection('users').updateOne(
-          { walletAddress },
+          { walletAddress: targetWalletAddress },
           {
             $set: {
               osmoBalance,
@@ -113,7 +125,7 @@ async function assignRolesHandler(request: NextRequest) {
         
         // Still update database even if Discord assignment fails
         await db.collection('users').updateOne(
-          { walletAddress },
+          { walletAddress: targetWalletAddress },
           {
             $set: {
               osmoBalance,
@@ -133,7 +145,7 @@ async function assignRolesHandler(request: NextRequest) {
     } else {
       // No eligible roles found
       await db.collection('users').updateOne(
-        { walletAddress },
+        { walletAddress: targetWalletAddress },
         {
           $set: {
             osmoBalance,

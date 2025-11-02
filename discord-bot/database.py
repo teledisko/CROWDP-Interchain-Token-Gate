@@ -13,6 +13,7 @@ class RoleDatabase:
         self.client: Optional[MongoClient] = None
         self.db: Optional[Database] = None
         self.roles_collection: Optional[Collection] = None
+        self.balance_history: Optional[Collection] = None
         
     async def connect(self):
         """Connect to MongoDB database"""
@@ -23,6 +24,7 @@ class RoleDatabase:
             self.client = MongoClient(mongodb_uri)
             self.db = self.client[db_name]
             self.roles_collection = self.db['roles']
+            self.balance_history = self.db['balance_history']
             
             # Test the connection
             self.client.admin.command('ping')

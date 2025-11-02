@@ -3,9 +3,9 @@
 ## 🚀 Live Application URLs
 
 ### Production Services
-- **Web Application**: https://performer-drawings-daniel-bruce.trycloudflare.com
-- **Role Assignment Server**: https://locations-electronic-stanley-award.trycloudflare.com
-- **Balance Monitor**: https://load-workstation-frame-proposal.trycloudflare.com
+- **Web Application**: TBD
+- **Role Assignment Server**: local
+- **Balance Monitor**: local
 
 ## 📋 Server Information
 
